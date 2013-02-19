@@ -102,9 +102,12 @@ class Emitter(object):
             ret = None
 
             # return anything we've already seen as a string only
-            # this prevents infinite recursion in the case of recursive relationships
+            # this prevents infinite recursion in the case of recursive
+            # relationships
+
             if thing in self.stack:
-                return None
+                raise RuntimeError, (u'Circular reference detected while emitting '
+                                     'response')
 
             self.stack.append(thing)
 
@@ -165,10 +168,16 @@ class Emitter(object):
 
             if handler or fields:
                 v = lambda f: getattr(data, f.attname)
-
+                # FIXME
+                # Catch 22 here. Either we use the fields from the
+                # typemapped handler to make nested models work but the
+                # declared list_fields will ignored for models, or we
+                # use the list_fields from the base handler and accept that
+                # the nested models won't appear properly
+                # Refs #157
                 if handler:
-                    fields = getattr(handler, 'fields')    
-                
+                    fields = getattr(handler, 'fields')
+
                 if not fields or hasattr(handler, 'fields'):
                     """
                     Fields was not specified, try to find teh correct
@@ -184,7 +193,7 @@ class Emitter(object):
                     if not get_fields:
                         get_fields = set([ f.attname.replace("_id", "", 1)
                             for f in data._meta.fields + data._meta.virtual_fields])
-                    
+
                     if hasattr(mapped, 'extra_fields'):
                         get_fields.update(mapped.extra_fields)
 
@@ -420,7 +429,7 @@ class YAMLEmitter(Emitter):
 
 if yaml:  # Only register yaml if it was import successfully.
     Emitter.register('yaml', YAMLEmitter, 'application/x-yaml; charset=utf-8')
-    Mimer.register(lambda s: dict(yaml.load(s)), ('application/x-yaml',))
+    Mimer.register(lambda s: dict(yaml.safe_load(s)), ('application/x-yaml',))
 
 class PickleEmitter(Emitter):
     """
